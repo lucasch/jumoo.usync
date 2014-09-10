@@ -43,9 +43,21 @@ namespace jumoo.usync.content.helpers
             xml.Add(new XAttribute("isDoc", ""));
             xml.Add(new XAttribute("updated", item.UpdateDate));
 
+            LogHelper.Debug<uSyncXmlHelper>(">> Starting property loop");
             foreach (var property in item.Properties.Where(p => p != null))
             {
-                XElement propXml = property.ToXml();
+                LogHelper.Debug<uSyncXmlHelper>("Property: {0}", () => property.Alias);
+                XElement propXml = null;
+
+                try
+                {
+                    propXml = property.ToXml();
+                }
+                // if it can't be serialized
+                catch
+                {
+                    propXml = new XElement(property.Alias, string.Empty);
+                }
 
                 string xmlVal = "";
                 if (mapProps)
@@ -63,6 +75,7 @@ namespace jumoo.usync.content.helpers
 
                 xml.Add(p);
             }
+            LogHelper.Debug<uSyncXmlHelper>("<< finished property loop");
 
             return xml;
         }
@@ -121,7 +134,8 @@ namespace jumoo.usync.content.helpers
         private static Guid? GetGuidFromId(int id)
         {
             LogHelper.Debug<uSyncXmlHelper>("Getting guid from id {0}", () => id);
-            ContentService cs = new ContentService();
+            var cs = ApplicationContext.Current.Services.ContentService;
+            // ContentService cs = new ContentService();
 
             IContent contentItem = cs.GetById(id);
             if (contentItem != null)

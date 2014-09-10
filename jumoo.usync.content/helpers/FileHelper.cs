@@ -8,7 +8,10 @@ using Umbraco.Core.Logging;
 
 using System.Xml.Linq;
 using System;
-using System.Text; 
+using System.Text;
+
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace jumoo.usync.content.helpers
 {
@@ -213,10 +216,24 @@ namespace jumoo.usync.content.helpers
             
         }
 
-
-        public static void ExportMediaFile(string path, Guid key) 
+        internal static bool IsJson(string input)
         {
-            string fileroot = IOHelper.MapPath(_mappedFilesRoot) ; 
+            input = input.Trim();
+            return (input.StartsWith("{") && input.EndsWith("}"))
+                || (input.StartsWith("[") && input.EndsWith("]"));
+        }
+
+        public static void ExportMediaFile(string mediaInfo, Guid key) 
+        {
+            string fileroot = IOHelper.MapPath(_mappedFilesRoot) ;
+
+            string path = string.Empty; 
+
+            // Umbraco 7's image cropper saves umbracoFile as JSON
+            if (IsJson(mediaInfo))
+                path = JsonConvert.DeserializeObject<dynamic>(mediaInfo).src;
+            else
+                path = mediaInfo;
 
             string folder =  Path.Combine(fileroot, key.ToString() ) ; 
             string dest = Path.Combine( folder, Path.GetFileName(path) ) ; 
@@ -257,21 +274,40 @@ namespace jumoo.usync.content.helpers
             // some is it already there logic ? 
             if (item.HasProperty("umbracoFile"))
             {
+                LogHelper.Debug<FileHelper>("Has umbracoFile");
                 if (item.GetValue("umbracoFile") != null)
                 {
+                    LogHelper.Debug<FileHelper>("umbracoFile value [{0}]", () => item.GetValue("umbracoFile").ToString() );
                     string umbracoFile = item.GetValue("umbracoFile").ToString();
 
-                    //
-                    // we check it's in the media folder, because later we delete it and all it's sub folders
-                    // if for some reason it was blank or mallformed we could trash the whole umbraco just here.
-                    //
-                    if (umbracoFile.StartsWith("/media/")) 
+                    // standard uploaded the path is a string . 
+                    // for Umbraco 7's image cropper it's all JSON
+                    string path = umbracoFile;
+                    if ( !string.IsNullOrWhiteSpace(umbracoFile))
                     {
-                        string f = IOHelper.MapPath(string.Format("~{0}", item.GetValue("umbracoFile").ToString()));
-                        if (System.IO.File.Exists(f))
+                        if ( IsJson(umbracoFile))
                         {
-                            LogHelper.Debug<FileHelper>("Getting info for {0}", () => f); 
-                            currentFile = new FileInfo(f);                             
+                            var jsonUmbracoFile = JsonConvert.DeserializeObject<dynamic>(umbracoFile);
+                            path = jsonUmbracoFile.src;
+                        }
+                    }
+
+                    LogHelper.Debug<FileHelper>("path {0}", () => path);
+
+                    if (!string.IsNullOrWhiteSpace(path))
+                    {
+                        //
+                        // we check it's in the media folder, because later we delete it and all it's sub folders
+                        // if for some reason it was blank or mallformed we could trash the whole umbraco just here.
+                        //
+                        if (path.StartsWith("/media/"))
+                        {
+                            string f = IOHelper.MapPath(string.Format("~{0}", path));
+                            if (System.IO.File.Exists(f))
+                            {
+                                LogHelper.Debug<FileHelper>("Getting info for {0}", () => f);
+                                currentFile = new FileInfo(f);
+                            }
                         }
                     }
                 }
@@ -288,6 +324,7 @@ namespace jumoo.usync.content.helpers
 
                 if (currentFile != null)
                 {
+                    // LogHelper.Debug<FileHelper>("Comparing {0} - {1}", () => currentFile.Name, () => file);
                     // do some file comparison, we only import if the new file
                     // is diffrent than the existing one..
                     if (!FilesAreEqual(currentFile, new FileInfo(file)))
@@ -296,7 +333,7 @@ namespace jumoo.usync.content.helpers
                         string filename = Path.GetFileName(file);
 
                         FileStream s = new FileStream(file, FileMode.Open);
-                        item.SetValue("umbracoFile", filename, s);
+                        item.SetValue("umbracoFile", filename, s); // question this for imagecropper types... 
                         s.Close();
 
                         // ok so now we've gone and created a new folder, we need to delete the old on
@@ -306,6 +343,7 @@ namespace jumoo.usync.content.helpers
                             Directory.Delete(currentFile.DirectoryName, true);
                         }
                     }
+                    // LogHelper.Debug<FileHelper>("Done comparing {0} - {1}", () => currentFile.Name, () => file);
                 }
                 else
                 {
@@ -315,9 +353,8 @@ namespace jumoo.usync.content.helpers
                     FileStream s = new FileStream(file, FileMode.Open);
                     item.SetValue("umbracoFile", Path.GetFileName(file), s);
                     s.Close();
-
-
                 }
+                LogHelper.Debug<FileHelper>("<< Done Import {0}", () => file);
             }
         }
 
