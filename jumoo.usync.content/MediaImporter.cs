@@ -143,7 +143,7 @@ namespace jumoo.usync.content
                     media.ParentId = parentId;
 
                 // load all the properties 
-                /*
+                
                 var properties = from property in element.Elements()
                                  where property.Attribute("isDoc") == null
                                  select property;
@@ -160,7 +160,7 @@ namespace jumoo.usync.content
                         media.SetValue(propertyTypeAlias, GetImportInnerXML(property));
                     }
                 }
-                */
+                
 
                 FileHelper.ImportMediaFile(mediaGuid, media);               
                 
